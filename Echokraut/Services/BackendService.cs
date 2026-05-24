@@ -353,6 +353,21 @@ public class BackendService : IBackendService, IDisposable
         return await _backend.CheckReady(eventId);
     }
 
+    public void InterruptCurrentGeneration(EKEventId eventId)
+    {
+        if (_backend == null) return;
+
+        try
+        {
+            _ = _backend.StopGenerating(eventId);
+            _log.Debug(nameof(InterruptCurrentGeneration), "Requested backend generation stop", eventId);
+        }
+        catch (Exception ex)
+        {
+            _log.Warning(nameof(InterruptCurrentGeneration), $"Failed to request generation stop: {ex.Message}", eventId);
+        }
+    }
+
     public void CancelAll()
     {
         _log.Info(nameof(CancelAll), "Stopping all voice processing", new EKEventId(0, TextSource.None));

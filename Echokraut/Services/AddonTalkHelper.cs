@@ -195,6 +195,11 @@ public unsafe class AddonTalkHelper : IAddonTalkHelper
 
         var _baseId = _log.Start(nameof(HandleChange), TextSource.AddonTalk);
         var eventId = new EKEventId(_baseId.Id, _baseId.TextSource);
+        var captureSeq = DialogState.NextCaptureSequence();
+
+        _log.Info(nameof(HandleChange),
+            $"CAPTURE seq={captureSeq} src=AddonTalk speaker='{speaker ?? ""}' raw='{text ?? ""}'",
+            eventId);
 
         // Notify observers that the addon state was advanced
         if (_configuration.CancelSpeechOnTextAdvance)

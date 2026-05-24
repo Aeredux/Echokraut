@@ -9,6 +9,7 @@ namespace Echokraut.Services.Queue;
 public class VoiceMessageEntry
 {
     public VoiceMessage Message { get; }
+    public bool IsPriority { get; }
     public VoiceMessageState State { get; set; }
     public DateTime QueuedAt { get; }
     public DateTime? StartedGeneratingAt { get; set; }
@@ -17,9 +18,10 @@ public class VoiceMessageEntry
     public Exception? Error { get; set; }
     public Guid Id { get; }
 
-    public VoiceMessageEntry(VoiceMessage message)
+    public VoiceMessageEntry(VoiceMessage message, bool isPriority = false)
     {
         Message = message ?? throw new ArgumentNullException(nameof(message));
+        IsPriority = isPriority;
         State = VoiceMessageState.PendingGeneration;
         QueuedAt = DateTime.UtcNow;
         Id = Guid.NewGuid();

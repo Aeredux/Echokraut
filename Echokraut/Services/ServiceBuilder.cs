@@ -256,6 +256,7 @@ public static class ServiceBuilder
             c.GetService<ILogService>(),
             configuration,
             c.GetService<IAddonCancelService>(),
+            c.GetService<IAudioPlaybackService>(),
             c.GetService<IGameObjectService>(),
             c.GetService<ITextProcessingService>()));
 
@@ -265,6 +266,7 @@ public static class ServiceBuilder
             c.GetService<ILogService>(),
             configuration,
             c.GetService<IAddonCancelService>(),
+            c.GetService<IAudioPlaybackService>(),
             c.GetService<IGameObjectService>(),
             c.GetService<ITextProcessingService>()));
 

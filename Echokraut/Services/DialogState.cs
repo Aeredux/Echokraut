@@ -1,15 +1,20 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using System.Threading;
 using Echokraut.DataClasses;
 
 namespace Echokraut.Services;
 
 public static class DialogState
 {
+    private static long _captureSequence;
+
     public static VoiceMessage? CurrentVoiceMessage;
     public static bool IsVoiced;
     public static Func<Vector2, bool>? IsInsideOwnedWindow;
+
+    public static long NextCaptureSequence() => Interlocked.Increment(ref _captureSequence);
 
     /// <summary>
     /// Character IDs that have already been resolved via the DB speaker-alias lookup

@@ -20,6 +20,7 @@ public interface IAudioPlaybackService
 
     void AddToQueue(VoiceMessage voiceMessage);
     void ClearQueue(TextSource textSource = TextSource.None);
+    void ClearQueueOlderThan(TextSource textSource, int maxExclusiveEventId);
 
     void Update3DFactors(float audibleRange);
     PlaybackState GetStreamState(Guid streamId);

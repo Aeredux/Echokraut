@@ -39,7 +39,7 @@ namespace Echokraut.Backend
             };
             using var streamingClient = new HttpClient(handler);
             streamingClient.BaseAddress = new Uri(_configuration.Alltalk.BaseUrl);
-            streamingClient.Timeout = TimeSpan.FromSeconds(2);
+            streamingClient.Timeout = TimeSpan.FromSeconds(20);
 
             HttpResponseMessage? res = null;
             try

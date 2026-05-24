@@ -87,7 +87,9 @@ public class AudioPlaybackService : IAudioPlaybackService, IDisposable
     {
         if (voiceMessage == null) throw new ArgumentNullException(nameof(voiceMessage));
         var isPriority = voiceMessage.Source == TextSource.AddonTalk ||
-                         voiceMessage.Source == TextSource.AddonBattleTalk;
+                         voiceMessage.Source == TextSource.AddonBattleTalk ||
+                         voiceMessage.Source == TextSource.AddonSelectString ||
+                         voiceMessage.Source == TextSource.AddonCutsceneSelectString;
         _queue.Enqueue(voiceMessage, isPriority);
     }
 
@@ -122,6 +124,11 @@ public class AudioPlaybackService : IAudioPlaybackService, IDisposable
             _queue.CancelAll();
         else
             _queue.CancelBySource(textSource);
+    }
+
+    public void ClearQueueOlderThan(TextSource textSource, int maxExclusiveEventId)
+    {
+        _queue.CancelBySourceOlderThan(textSource, maxExclusiveEventId);
     }
 
     private void OnSourceEnded(Guid guid)

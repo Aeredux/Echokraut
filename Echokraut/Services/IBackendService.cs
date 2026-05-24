@@ -40,6 +40,7 @@ public interface IBackendService
     void ProcessVoiceMessage(VoiceMessage voiceMessage);
     Task<bool> GenerateVoice(VoiceMessage message);
     Task<string> CheckReady(EKEventId eventId);
+    void InterruptCurrentGeneration(EKEventId eventId);
     void CancelAll();
     void Cancel(VoiceMessage message);
     void Pause(VoiceMessage message);

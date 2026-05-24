@@ -72,6 +72,23 @@ public class VoiceMessageQueueTests
         Assert.Equal("Priority", first!.Message.Text);
     }
 
+    [Fact]
+    public void PendingDialogue_DequeuesByEventIdOrder()
+    {
+        var queue = new VoiceMessageQueue();
+        var later = MakeMessage(TextSource.AddonTalk, "Later");
+        later.EventId = new EKEventId(200, TextSource.AddonTalk);
+        var earlier = MakeMessage(TextSource.AddonTalk, "Earlier");
+        earlier.EventId = new EKEventId(100, TextSource.AddonTalk);
+
+        queue.Enqueue(later, isPriority: true);
+        queue.Enqueue(earlier, isPriority: true);
+
+        var found = queue.TryDequeuePendingGeneration(out var first);
+        Assert.True(found);
+        Assert.Equal("Earlier", first!.Message.Text);
+    }
+
     // ── State transitions ─────────────────────────────────────────────────────
 
     [Fact]
@@ -99,6 +116,32 @@ public class VoiceMessageQueueTests
         var found = queue.TryDequeueReadyToPlay(out var ready);
         Assert.True(found);
         Assert.Equal(entry.Id, ready!.Id);
+    }
+
+    [Fact]
+    public void ReadyDialogue_DequeuesByEventIdOrder()
+    {
+        var queue = new VoiceMessageQueue();
+
+        var later = MakeMessage(TextSource.AddonTalk, "LaterReady");
+        later.EventId = new EKEventId(40, TextSource.AddonTalk);
+        var earlier = MakeMessage(TextSource.AddonTalk, "EarlierReady");
+        earlier.EventId = new EKEventId(30, TextSource.AddonTalk);
+
+        queue.Enqueue(later, isPriority: true);
+        queue.Enqueue(earlier, isPriority: true);
+
+        queue.TryDequeuePendingGeneration(out var a);
+        queue.MarkAsGenerating(a!.Id);
+        queue.MarkAsReadyToPlay(a.Id);
+
+        queue.TryDequeuePendingGeneration(out var b);
+        queue.MarkAsGenerating(b!.Id);
+        queue.MarkAsReadyToPlay(b.Id);
+
+        var found = queue.TryDequeueReadyToPlay(out var firstReady);
+        Assert.True(found);
+        Assert.Equal("EarlierReady", firstReady!.Message.Text);
     }
 
     [Fact]
@@ -218,6 +261,46 @@ public class VoiceMessageQueueTests
         queue.CancelBySource(TextSource.AddonTalk);
 
         Assert.Equal(VoiceMessageState.Completed, queue.GetEntry(entry.Id)!.State);
+    }
+
+    [Fact]
+    public void CancelBySourceOlderThan_CancelsOnlyOlderEntries()
+    {
+        var queue = new VoiceMessageQueue();
+
+        var older = MakeMessage(TextSource.AddonTalk, "Old");
+        older.EventId = new EKEventId(10, TextSource.AddonTalk);
+        var newer = MakeMessage(TextSource.AddonTalk, "New");
+        newer.EventId = new EKEventId(20, TextSource.AddonTalk);
+
+        queue.Enqueue(older);
+        queue.Enqueue(newer);
+
+        queue.CancelBySourceOlderThan(TextSource.AddonTalk, 15);
+
+        var cancelled = queue.GetEntriesByState(VoiceMessageState.Cancelled)
+            .Where(e => e.Message.Source == TextSource.AddonTalk)
+            .Select(e => e.Message.Text)
+            .ToList();
+
+        Assert.Contains("Old", cancelled);
+        Assert.DoesNotContain("New", cancelled);
+    }
+
+    [Fact]
+    public void MarkAsReadyToPlay_DoesNotReviveCancelledEntry()
+    {
+        var queue = new VoiceMessageQueue();
+        queue.Enqueue(MakeMessage(TextSource.AddonTalk));
+        queue.TryDequeuePendingGeneration(out var entry);
+        queue.MarkAsGenerating(entry!.Id);
+        queue.MarkAsCancelled(entry.Id);
+
+        queue.MarkAsReadyToPlay(entry.Id);
+
+        var found = queue.TryDequeueReadyToPlay(out _);
+        Assert.False(found);
+        Assert.Equal(VoiceMessageState.Cancelled, queue.GetEntry(entry.Id)!.State);
     }
 
     // ── Statistics ────────────────────────────────────────────────────────────

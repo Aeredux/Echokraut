@@ -33,7 +33,7 @@ public class VoiceMessageQueue : IVoiceMessageQueue
     {
         if (message == null) throw new ArgumentNullException(nameof(message));
         
-        var entry = new VoiceMessageEntry(message);
+        var entry = new VoiceMessageEntry(message, isPriority);
         _allEntries[entry.Id] = entry;
         
         if (isPriority)
@@ -44,31 +44,89 @@ public class VoiceMessageQueue : IVoiceMessageQueue
 
     public bool TryDequeuePendingGeneration(out VoiceMessageEntry? entry)
     {
-        // Priority queue first
-        if (_priorityPendingQueue.TryDequeue(out entry))
-            return true;
-        
-        // Then normal queue
-        if (_normalPendingQueue.TryDequeue(out entry))
-            return true;
-        
-        entry = null;
-        return false;
+        var pending = _allEntries.Values
+            .Where(e => e.State == VoiceMessageState.PendingGeneration)
+            .ToList();
+        if (pending.Count == 0)
+        {
+            entry = null;
+            return false;
+        }
+
+        var pool = pending.Any(e => e.IsPriority)
+            ? pending.Where(e => e.IsPriority).ToList()
+            : pending;
+
+        entry = SelectDeterministicEntry(pool, null);
+        return entry != null;
     }
 
     public bool TryDequeueReadyToPlay(out VoiceMessageEntry? entry)
     {
-        if (_readyToPlayQueue.TryDequeue(out entry))
-            return true;
-        
-        entry = null;
-        return false;
+        var ready = _allEntries.Values
+            .Where(e => e.State == VoiceMessageState.ReadyToPlay)
+            .ToList();
+        if (ready.Count == 0)
+        {
+            entry = null;
+            return false;
+        }
+
+        var pool = ready.Any(e => e.IsPriority)
+            ? ready.Where(e => e.IsPriority).ToList()
+            : ready;
+
+        entry = SelectDeterministicEntry(pool, _allEntries.Values.ToList());
+        return entry != null;
     }
+
+    private VoiceMessageEntry? SelectDeterministicEntry(IReadOnlyList<VoiceMessageEntry> entries, IReadOnlyList<VoiceMessageEntry>? allEntries = null)
+    {
+        var dialogue = entries.Where(e => IsDialogueSource(e.Message.Source)).ToList();
+        if (dialogue.Count > 0)
+        {
+            // Hold AddonTalk/BattleTalk entries for 250ms to allow player choice to arrive and be dequeued first
+            var now = DateTime.UtcNow;
+            const int minQueueAgeMs = 250;
+            
+            var eligibleDialogue = dialogue
+                .Where(e => 
+                {
+                    var isNpcLine = e.Message.Source == TextSource.AddonTalk || e.Message.Source == TextSource.AddonBattleTalk;
+                    if (!isNpcLine)
+                        return true;
+                    
+                    var ageMs = (now - e.QueuedAt).TotalMilliseconds;
+                    return ageMs >= minQueueAgeMs;
+                })
+                .ToList();
+
+            // If all candidates are NPC lines still waiting for age minimum, return nothing to wait
+            if (eligibleDialogue.Count == 0)
+                return null;
+
+            return eligibleDialogue
+                .OrderBy(e => e.Message.EventId?.Id ?? int.MaxValue)
+                .ThenBy(e => e.QueuedAt)
+                .FirstOrDefault();
+        }
+
+        return entries.OrderBy(e => e.QueuedAt).FirstOrDefault();
+    }
+
+    private static bool IsDialogueSource(TextSource source)
+        => source is TextSource.AddonTalk
+            or TextSource.AddonBattleTalk
+            or TextSource.AddonSelectString
+            or TextSource.AddonCutsceneSelectString
+            or TextSource.VoiceTest;
 
     public void MarkAsGenerating(Guid entryId)
     {
         if (_allEntries.TryGetValue(entryId, out var entry))
         {
+            if (entry.State is VoiceMessageState.Cancelled or VoiceMessageState.Completed or VoiceMessageState.Failed)
+                return;
             entry.TransitionTo(VoiceMessageState.Generating);
             _generatingEntries[entryId] = entry;
         }
@@ -78,6 +136,8 @@ public class VoiceMessageQueue : IVoiceMessageQueue
     {
         if (_allEntries.TryGetValue(entryId, out var entry))
         {
+            if (entry.State is VoiceMessageState.Cancelled or VoiceMessageState.Completed or VoiceMessageState.Failed)
+                return;
             entry.TransitionTo(VoiceMessageState.ReadyToPlay);
             _generatingEntries.TryRemove(entryId, out _);
             _readyToPlayQueue.Enqueue(entry);
@@ -88,6 +148,8 @@ public class VoiceMessageQueue : IVoiceMessageQueue
     {
         if (_allEntries.TryGetValue(entryId, out var entry))
         {
+            if (entry.State is VoiceMessageState.Cancelled or VoiceMessageState.Completed or VoiceMessageState.Failed)
+                return;
             entry.TransitionTo(VoiceMessageState.Playing);
             lock (_playingLock)
             {
@@ -155,6 +217,19 @@ public class VoiceMessageQueue : IVoiceMessageQueue
         foreach (var entry in _allEntries.Values.Where(e => e.Message.Source == source))
         {
             if (entry.State != VoiceMessageState.Completed && 
+                entry.State != VoiceMessageState.Cancelled &&
+                entry.State != VoiceMessageState.Failed)
+            {
+                MarkAsCancelled(entry.Id);
+            }
+        }
+    }
+
+    public void CancelBySourceOlderThan(TextSource source, int maxExclusiveEventId)
+    {
+        foreach (var entry in _allEntries.Values.Where(e => e.Message.Source == source && e.Message.EventId != null && e.Message.EventId.Id < maxExclusiveEventId))
+        {
+            if (entry.State != VoiceMessageState.Completed &&
                 entry.State != VoiceMessageState.Cancelled &&
                 entry.State != VoiceMessageState.Failed)
             {

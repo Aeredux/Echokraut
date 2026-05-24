@@ -25,6 +25,7 @@ public class AddonCutSceneSelectStringHelper : IAddonCutSceneSelectStringHelper
     private readonly ILogService _log;
     private readonly Configuration _configuration;
     private readonly IAddonCancelService _cancelService;
+    private readonly IAudioPlaybackService _audioPlayback;
     private readonly IGameObjectService _gameObjects;
     private readonly ITextProcessingService _textProcessing;
 
@@ -36,6 +37,7 @@ public class AddonCutSceneSelectStringHelper : IAddonCutSceneSelectStringHelper
         ILogService log,
         Configuration configuration,
         IAddonCancelService cancelService,
+        IAudioPlaybackService audioPlayback,
         IGameObjectService gameObjects,
         ITextProcessingService textProcessing)
     {
@@ -44,6 +46,7 @@ public class AddonCutSceneSelectStringHelper : IAddonCutSceneSelectStringHelper
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         _cancelService = cancelService ?? throw new ArgumentNullException(nameof(cancelService));
+        _audioPlayback = audioPlayback ?? throw new ArgumentNullException(nameof(audioPlayback));
         _gameObjects = gameObjects ?? throw new ArgumentNullException(nameof(gameObjects));
         _textProcessing = textProcessing ?? throw new ArgumentNullException(nameof(textProcessing));
         HookIntoAddonLifecycle();
@@ -60,7 +63,19 @@ public class AddonCutSceneSelectStringHelper : IAddonCutSceneSelectStringHelper
         if (!_configuration.Enabled) return;
         if (!_configuration.VoicePlayerChoicesCutscene) return;
 
-        GetAddonStrings(((AddonCutSceneSelectString*)args.Addon.Address)->OptionList);
+        var list = ((AddonCutSceneSelectString*)args.Addon.Address)->OptionList;
+        GetAddonStrings(list);
+
+        if (list is not null)
+        {
+            var selectedItem = list->SelectedItemIndex;
+            var selectedPreview = selectedItem >= 0 && selectedItem < options.Count ? options[selectedItem] : "";
+            var seq = DialogState.NextCaptureSequence();
+            var eventId = new EKEventId(0, TextSource.AddonCutsceneSelectString);
+            _log.Info(nameof(OnPostSetup),
+                $"CAPTURE seq={seq} src=AddonCutsceneSelectStringMenuVisible selectedIndex={selectedItem} selectedPreview='{selectedPreview}' options={options.Count}",
+                eventId);
+        }
     }
 
     private unsafe void OnPreFinalize(AddonEvent type, AddonArgs args)
@@ -120,8 +135,15 @@ public class AddonCutSceneSelectStringHelper : IAddonCutSceneSelectStringHelper
 
         var _baseId = _log.Start(nameof(HandleChange), TextSource.AddonCutsceneSelectString);
         var eventId = new EKEventId(_baseId.Id, _baseId.TextSource);
-        // Notify observers that the addon state was advanced
-        _cancelService.Cancel(DialogState.CurrentVoiceMessage);
+        var captureSeq = DialogState.NextCaptureSequence();
+
+        _log.Info(nameof(HandleChange),
+            $"CAPTURE seq={captureSeq} src=AddonCutsceneSelectString speaker='{speaker ?? ""}' raw='{text ?? ""}'",
+            eventId);
+
+        var current = DialogState.CurrentVoiceMessage;
+        if (current?.Source is TextSource.AddonSelectString or TextSource.AddonCutsceneSelectString)
+            _cancelService.Cancel(current);
 
         text = _textProcessing.NormalizePunctuation(text);
 

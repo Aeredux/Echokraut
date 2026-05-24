@@ -67,6 +67,12 @@ public interface IVoiceMessageQueue : IDisposable
     /// Cancel all messages from a specific source
     /// </summary>
     void CancelBySource(TextSource source);
+
+    /// <summary>
+    /// Cancel messages from a specific source with EventId.Id lower than maxExclusiveEventId.
+    /// Useful to drop stale pre-choice lines while preserving fresh post-choice dialogue.
+    /// </summary>
+    void CancelBySourceOlderThan(TextSource source, int maxExclusiveEventId);
     
     /// <summary>
     /// Cancel all messages

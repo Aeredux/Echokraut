@@ -28,6 +28,7 @@ public unsafe class AddonSelectStringHelper : IAddonSelectStringHelper
     private readonly ILogService _log;
     private readonly Configuration _configuration;
     private readonly IAddonCancelService _cancelService;
+    private readonly IAudioPlaybackService _audioPlayback;
     private readonly IGameObjectService _gameObjects;
     private readonly ITextProcessingService _textProcessing;
 
@@ -40,6 +41,7 @@ public unsafe class AddonSelectStringHelper : IAddonSelectStringHelper
         ILogService log,
         Configuration configuration,
         IAddonCancelService cancelService,
+        IAudioPlaybackService audioPlayback,
         IGameObjectService gameObjects,
         ITextProcessingService textProcessing)
     {
@@ -49,6 +51,7 @@ public unsafe class AddonSelectStringHelper : IAddonSelectStringHelper
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         _cancelService = cancelService ?? throw new ArgumentNullException(nameof(cancelService));
+        _audioPlayback = audioPlayback ?? throw new ArgumentNullException(nameof(audioPlayback));
         _gameObjects = gameObjects ?? throw new ArgumentNullException(nameof(gameObjects));
         _textProcessing = textProcessing ?? throw new ArgumentNullException(nameof(textProcessing));
         HookIntoAddonLifecycle();
@@ -66,7 +69,19 @@ public unsafe class AddonSelectStringHelper : IAddonSelectStringHelper
         if (!_configuration.VoicePlayerChoices) return;
         if (!_condition[ConditionFlag.OccupiedInQuestEvent]) return;
 
-        GetAddonStrings(((AddonSelectString*)args.Addon.Address)->PopupMenu.PopupMenu.List);
+        var list = ((AddonSelectString*)args.Addon.Address)->PopupMenu.PopupMenu.List;
+        GetAddonStrings(list);
+
+        if (list is not null)
+        {
+            var selectedItem = list->SelectedItemIndex;
+            var selectedPreview = selectedItem >= 0 && selectedItem < options.Count ? options[selectedItem] : "";
+            var seq = DialogState.NextCaptureSequence();
+            var eventId = new EKEventId(0, TextSource.AddonSelectString);
+            _log.Info(nameof(OnPostSetup),
+                $"CAPTURE seq={seq} src=AddonSelectStringMenuVisible selectedIndex={selectedItem} selectedPreview='{selectedPreview}' options={options.Count}",
+                eventId);
+        }
     }
 
     private unsafe void OnPreFinalize(AddonEvent type, AddonArgs args)
@@ -121,6 +136,7 @@ public unsafe class AddonSelectStringHelper : IAddonSelectStringHelper
         var (speaker, text, pollSource) = state;
         var _baseId = _log.Start(nameof(HandleChange), TextSource.AddonSelectString);
         var eventId = new EKEventId(_baseId.Id, _baseId.TextSource);
+        var captureSeq = DialogState.NextCaptureSequence();
 
         if (state == default)
         {
@@ -128,8 +144,13 @@ public unsafe class AddonSelectStringHelper : IAddonSelectStringHelper
             return;
         }
 
-        // Notify observers that the addon state was advanced
-        _cancelService.Cancel(DialogState.CurrentVoiceMessage);
+        _log.Info(nameof(HandleChange),
+            $"CAPTURE seq={captureSeq} src=AddonSelectString speaker='{speaker ?? ""}' raw='{text ?? ""}'",
+            eventId);
+
+        var current = DialogState.CurrentVoiceMessage;
+        if (current?.Source is TextSource.AddonSelectString or TextSource.AddonCutsceneSelectString)
+            _cancelService.Cancel(current);
 
         text = _textProcessing.NormalizePunctuation(text);
 
