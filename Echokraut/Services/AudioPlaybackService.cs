@@ -1,4 +1,5 @@
 using Echotools.Logging.Services;
+using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Plugin.Services;
 using Echokraut.DataClasses;
 using Echotools.Logging.DataClasses;
@@ -183,7 +184,8 @@ public class AudioPlaybackService : IAudioPlaybackService, IDisposable
         if (message.Source == TextSource.VoiceTest)
             CurrentMessageChanged?.Invoke(null);
 
-        if (message.IsLastInDialogue && _configuration.AutoAdvanceTextAfterSpeechCompleted)
+        var isPlayerSpeaker = message.Speaker?.ObjectKind == ObjectKind.Pc;
+        if (message.IsLastInDialogue && _configuration.AutoAdvanceTextAfterSpeechCompleted && !isPlayerSpeaker)
         {
             try
             {
