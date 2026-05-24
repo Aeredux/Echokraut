@@ -12,7 +12,6 @@ using System.Linq;
 using Echokraut.Helper.Functional;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using Echokraut.Services;
-using Echokraut.Services.Queue;
 using Echotools.Logging.Services;
 using System;
 
@@ -32,7 +31,6 @@ public unsafe class AddonSelectStringHelper : IAddonSelectStringHelper
     private readonly IAudioPlaybackService _audioPlayback;
     private readonly IGameObjectService _gameObjects;
     private readonly ITextProcessingService _textProcessing;
-    private readonly IVoiceMessageQueue _queue;
 
     private List<string> options = new List<string>();
 
@@ -45,8 +43,7 @@ public unsafe class AddonSelectStringHelper : IAddonSelectStringHelper
         IAddonCancelService cancelService,
         IAudioPlaybackService audioPlayback,
         IGameObjectService gameObjects,
-        ITextProcessingService textProcessing,
-        IVoiceMessageQueue queue)
+        ITextProcessingService textProcessing)
     {
         _voiceProcessor = voiceProcessor ?? throw new ArgumentNullException(nameof(voiceProcessor));
         _addonLifecycle = addonLifecycle ?? throw new ArgumentNullException(nameof(addonLifecycle));
@@ -57,7 +54,6 @@ public unsafe class AddonSelectStringHelper : IAddonSelectStringHelper
         _audioPlayback = audioPlayback ?? throw new ArgumentNullException(nameof(audioPlayback));
         _gameObjects = gameObjects ?? throw new ArgumentNullException(nameof(gameObjects));
         _textProcessing = textProcessing ?? throw new ArgumentNullException(nameof(textProcessing));
-        _queue = queue ?? throw new ArgumentNullException(nameof(queue));
         HookIntoAddonLifecycle();
     }
 
@@ -85,9 +81,6 @@ public unsafe class AddonSelectStringHelper : IAddonSelectStringHelper
             _log.Info(nameof(OnPostSetup),
                 $"CAPTURE seq={seq} src=AddonSelectStringMenuVisible selectedIndex={selectedItem} selectedPreview='{selectedPreview}' options={options.Count}",
                 eventId);
-            
-            // Block NPC dialogue while selection menu is active
-            _queue.SetSelectionMenuActive(true);
         }
     }
 
@@ -177,9 +170,6 @@ public unsafe class AddonSelectStringHelper : IAddonSelectStringHelper
             _log.Debug(nameof(HandleChange), $"object: ({state.Speaker})", eventId);
             _ = _voiceProcessor.ProcessSpeechAsync(eventId, null, state.Speaker ?? "PLAYER", text);
         }
-        
-        // Allow NPC dialogue to resume after choice is captured
-        _queue.SetSelectionMenuActive(false);
     }
 
     public void Dispose()
