@@ -258,7 +258,8 @@ public static class ServiceBuilder
             c.GetService<IAddonCancelService>(),
             c.GetService<IAudioPlaybackService>(),
             c.GetService<IGameObjectService>(),
-            c.GetService<ITextProcessingService>()));
+            c.GetService<ITextProcessingService>(),
+            c.GetService<IVoiceMessageQueue>()));
 
         container.RegisterFactory<IAddonCutSceneSelectStringHelper>(c => new AddonCutSceneSelectStringHelper(
             c.GetService<IVoiceMessageProcessor>(),
@@ -268,7 +269,8 @@ public static class ServiceBuilder
             c.GetService<IAddonCancelService>(),
             c.GetService<IAudioPlaybackService>(),
             c.GetService<IGameObjectService>(),
-            c.GetService<ITextProcessingService>()));
+            c.GetService<ITextProcessingService>(),
+            c.GetService<IVoiceMessageQueue>()));
 
         container.RegisterFactory<IAddonBubbleHelper>(c => new AddonBubbleHelper(
             c.GetService<IVoiceMessageProcessor>(),

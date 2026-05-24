@@ -98,6 +98,11 @@ public interface IVoiceMessageQueue : IDisposable
     /// Get queue statistics
     /// </summary>
     QueueStatistics GetStatistics();
+    
+    /// <summary>
+    /// Set whether a selection menu is active (blocks NPC dialogue until choice is made)
+    /// </summary>
+    void SetSelectionMenuActive(bool active);
 }
 
 /// <summary>

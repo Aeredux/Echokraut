@@ -10,6 +10,7 @@ using System.Linq;
 using System.Collections.Generic;
 using Echokraut.Helper.Functional;
 using Echokraut.Services;
+using Echokraut.Services.Queue;
 using Echotools.Logging.Services;
 using System;
 
@@ -28,6 +29,7 @@ public class AddonCutSceneSelectStringHelper : IAddonCutSceneSelectStringHelper
     private readonly IAudioPlaybackService _audioPlayback;
     private readonly IGameObjectService _gameObjects;
     private readonly ITextProcessingService _textProcessing;
+    private readonly IVoiceMessageQueue _queue;
 
     private List<string> options = new List<string>();
 
@@ -39,7 +41,8 @@ public class AddonCutSceneSelectStringHelper : IAddonCutSceneSelectStringHelper
         IAddonCancelService cancelService,
         IAudioPlaybackService audioPlayback,
         IGameObjectService gameObjects,
-        ITextProcessingService textProcessing)
+        ITextProcessingService textProcessing,
+        IVoiceMessageQueue queue)
     {
         _voiceProcessor = voiceProcessor ?? throw new ArgumentNullException(nameof(voiceProcessor));
         _addonLifecycle = addonLifecycle ?? throw new ArgumentNullException(nameof(addonLifecycle));
@@ -49,6 +52,7 @@ public class AddonCutSceneSelectStringHelper : IAddonCutSceneSelectStringHelper
         _audioPlayback = audioPlayback ?? throw new ArgumentNullException(nameof(audioPlayback));
         _gameObjects = gameObjects ?? throw new ArgumentNullException(nameof(gameObjects));
         _textProcessing = textProcessing ?? throw new ArgumentNullException(nameof(textProcessing));
+        _queue = queue ?? throw new ArgumentNullException(nameof(queue));
         HookIntoAddonLifecycle();
     }
 
@@ -75,6 +79,9 @@ public class AddonCutSceneSelectStringHelper : IAddonCutSceneSelectStringHelper
             _log.Info(nameof(OnPostSetup),
                 $"CAPTURE seq={seq} src=AddonCutsceneSelectStringMenuVisible selectedIndex={selectedItem} selectedPreview='{selectedPreview}' options={options.Count}",
                 eventId);
+            
+            // Block NPC dialogue while selection menu is active
+            _queue.SetSelectionMenuActive(true);
         }
     }
 
@@ -163,6 +170,9 @@ public class AddonCutSceneSelectStringHelper : IAddonCutSceneSelectStringHelper
             _log.Debug(nameof(HandleChange), $"object: ({state.Speaker})", eventId);
             _ = _voiceProcessor.ProcessSpeechAsync(eventId, null, state.Speaker ?? "PLAYER", text);
         }
+        
+        // Allow NPC dialogue to resume after choice is captured
+        _queue.SetSelectionMenuActive(false);
     }
 
     public void Dispose()

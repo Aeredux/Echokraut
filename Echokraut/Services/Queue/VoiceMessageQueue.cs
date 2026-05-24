@@ -23,6 +23,7 @@ public class VoiceMessageQueue : IVoiceMessageQueue
     private readonly ConcurrentDictionary<Guid, VoiceMessageEntry> _generatingEntries = new();
     private VoiceMessageEntry? _currentlyPlaying;
     private readonly object _playingLock = new();
+    private volatile bool _selectionMenuActive = false;
     
     // Statistics
     private int _totalCompleted;
@@ -85,27 +86,20 @@ public class VoiceMessageQueue : IVoiceMessageQueue
         var dialogue = entries.Where(e => IsDialogueSource(e.Message.Source)).ToList();
         if (dialogue.Count > 0)
         {
-            // Hold AddonTalk/BattleTalk entries for 250ms to allow player choice to arrive and be dequeued first
-            var now = DateTime.UtcNow;
-            const int minQueueAgeMs = 250;
-            
-            var eligibleDialogue = dialogue
-                .Where(e => 
-                {
-                    var isNpcLine = e.Message.Source == TextSource.AddonTalk || e.Message.Source == TextSource.AddonBattleTalk;
-                    if (!isNpcLine)
-                        return true;
-                    
-                    var ageMs = (now - e.QueuedAt).TotalMilliseconds;
-                    return ageMs >= minQueueAgeMs;
-                })
-                .ToList();
+            // If selection menu is active, block AddonTalk/BattleTalk until player chooses
+            if (_selectionMenuActive)
+            {
+                var nonNpcDialogue = dialogue
+                    .Where(e => e.Message.Source != TextSource.AddonTalk && e.Message.Source != TextSource.AddonBattleTalk)
+                    .ToList();
+                
+                if (nonNpcDialogue.Count > 0)
+                    dialogue = nonNpcDialogue;
+                else
+                    return null; // Block everything until choice is made
+            }
 
-            // If all candidates are NPC lines still waiting for age minimum, return nothing to wait
-            if (eligibleDialogue.Count == 0)
-                return null;
-
-            return eligibleDialogue
+            return dialogue
                 .OrderBy(e => e.Message.EventId?.Id ?? int.MaxValue)
                 .ThenBy(e => e.QueuedAt)
                 .FirstOrDefault();
@@ -262,6 +256,11 @@ public class VoiceMessageQueue : IVoiceMessageQueue
                 MarkAsCancelled(_currentlyPlaying.Id);
             }
         }
+    }
+
+    public void SetSelectionMenuActive(bool active)
+    {
+        _selectionMenuActive = active;
     }
 
     public VoiceMessageEntry? GetEntry(Guid entryId)
