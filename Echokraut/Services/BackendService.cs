@@ -430,6 +430,13 @@ public class BackendService : IBackendService, IDisposable
         if (voice == null || !voice.IsEnabled) return false;
         if (voice.IsDefault) return true;
 
+        // Unknown-race NPCs are intentionally sticky once a voice is assigned.
+        // They are the most likely to oscillate between heuristically inferred variants,
+        // so preserve the existing assignment instead of re-picking every time the body
+        // type or other inferred metadata changes a little between lines.
+        if (npc.Race == NpcRaces.Unknown && !string.IsNullOrEmpty(npc.voice))
+            return true;
+
         // Name-substring match — accept any voice whose name contains the NPC's name regardless
         // of the formal race/gender/body-type filter, matching IsSelectable.
         if (!string.IsNullOrEmpty(npc.Name) &&

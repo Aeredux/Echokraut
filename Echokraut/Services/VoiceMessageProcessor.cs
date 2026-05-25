@@ -388,6 +388,24 @@ public class VoiceMessageProcessor : IVoiceMessageProcessor
         npcData.Language = _clientState.ClientLanguage;
         npcData.World = worldEnglish ?? "";
 
+        // Reuse the character row already linked to this live ENpcBase whenever possible.
+        // This keeps voice assignment stable even when display-name normalization, race
+        // inference, or same-name NPC collisions would otherwise bounce between rows.
+        if (speaker != null
+            && speaker.BaseId != 0
+            && npcData.ObjectKind != ObjectKind.Pc)
+        {
+            var existingCharacter = _db.FindCharacterByInstanceBaseId(speaker.BaseId);
+            if (existingCharacter != null)
+            {
+                npcData.Name = existingCharacter.Name;
+                npcData.Race = (NpcRaces)existingCharacter.Race;
+                npcData.RaceStr = existingCharacter.RaceStr;
+                npcData.Gender = (Genders)existingCharacter.Gender;
+                npcData.voice = existingCharacter.VoiceKey ?? "";
+            }
+        }
+
         // Handle NPC name mapping. Two-step canonicalization:
         //   1) VoiceNames{LANG}.json — community-curated voice families (e.g. "Y'shtola's
         //      Avatar" → "Y'shtola"). Static, ships with the plugin.

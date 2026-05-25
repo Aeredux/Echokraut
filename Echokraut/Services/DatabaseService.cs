@@ -618,6 +618,19 @@ public class DatabaseService : IDatabaseService
         }
     }
 
+    public CharacterEntity? FindCharacterByInstanceBaseId(uint npcBaseId)
+    {
+        lock (_writeLock)
+        {
+            if (_disposed) return null;
+
+            return _context.CharacterInstances
+                .Include(ci => ci.Character)
+                .FirstOrDefault(ci => ci.NpcBaseId == (long)npcBaseId)
+                ?.Character;
+        }
+    }
+
     public CharacterEntity UpsertCharacter(CharacterEntity character)
     {
         lock (_writeLock)

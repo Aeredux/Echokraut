@@ -20,6 +20,7 @@ public class GameObjectService : IGameObjectService
     private readonly ILogService _logService;
     private readonly ITextProcessingService _textProcessingService;
     private readonly Dictionary<string, bool> _lastUnknownState = new();
+    private readonly Dictionary<string, ulong> _stickySpeakerObjects = new();
     
     private IGameObject? _nextUnknownCharacter;
     private string _localPlayerName = "";
@@ -94,12 +95,37 @@ public class GameObjectService : IGameObjectService
         if (name is null) return null;
         if (string.IsNullOrWhiteSpace(name.TextValue)) return null;
         if (!_textProcessingService.TryGetEntityName(name, out var parsedName)) return null;
-        
-        var obj = _objectTable.FirstOrDefault(gObj =>
-            _textProcessingService.TryGetEntityName(gObj.Name, out var gObjName) && gObjName == parsedName);
-        
+
+        var candidates = _objectTable
+            .Where(gObj =>
+                _textProcessingService.TryGetEntityName(gObj.Name, out var gObjName) && gObjName == parsedName)
+            .ToList();
+
+        IGameObject? obj = null;
+        var strategy = "none";
+
+        // Keep continuity for repeated same-name speakers. If multiple EventNpc objects share
+        // the same display name, reusing the last picked object avoids speaker identity flips.
+        if (_stickySpeakerObjects.TryGetValue(parsedName, out var stickyId))
+        {
+            obj = candidates.FirstOrDefault(c => c.GameObjectId == stickyId);
+            if (obj != null)
+                strategy = "sticky";
+        }
+
+        if (obj == null && candidates.Count > 0)
+        {
+            // Deterministic fallback (instead of object-table iteration order): pick by the
+            // smallest stable object id so repeated scans resolve the same way.
+            obj = candidates.OrderBy(c => c.GameObjectId).First();
+            strategy = "deterministic";
+        }
+
+        if (obj != null)
+            _stickySpeakerObjects[parsedName] = obj.GameObjectId;
+
         _logService.Info(nameof(GetGameObjectByName), 
-            $"Found GameObject: {obj} by name: {name.TextValue} and parsedName: {parsedName}", eventId);
+            $"Found GameObject: {obj} by name: {name.TextValue} and parsedName: {parsedName} (candidates={candidates.Count}, strategy={strategy})", eventId);
  
         return obj;
     }
@@ -135,6 +161,7 @@ public class GameObjectService : IGameObjectService
     {
         _logService.Debug(nameof(ClearLastUnknownState), "Clearing last unknown state", new EKEventId(0, TextSource.None));
         _lastUnknownState.Clear();
+        _stickySpeakerObjects.Clear();
         _nextUnknownCharacter = null;
     }
 }

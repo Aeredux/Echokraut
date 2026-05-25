@@ -96,6 +96,15 @@ public class VoiceClipManagerService : IVoiceClipManagerService
         var npcData = liveCache.Find(n =>
             n.Name == name && n.Gender == gender && n.Race == race && n.Language == language);
 
+        // If exact match fails and the NPC has an unknown race, try to find a cached entry
+        // with the same identity but Unknown race — this ensures consistent voice assignment
+        // across consecutive dialogues when the NPC's race hasn't been resolved yet.
+        if (npcData == null && race == NpcRaces.Unknown)
+        {
+            npcData = liveCache.Find(n =>
+                n.Name == name && n.Gender == gender && n.Race == NpcRaces.Unknown && n.Language == language);
+        }
+
         if (npcData == null)
         {
             // No live entry yet — fall back to a transient. The voice resolution mirrors the
