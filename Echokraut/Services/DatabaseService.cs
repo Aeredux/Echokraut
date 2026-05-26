@@ -618,16 +618,26 @@ public class DatabaseService : IDatabaseService
         }
     }
 
-    public CharacterEntity? FindCharacterByInstanceBaseId(uint npcBaseId)
+    public CharacterEntity? FindCharacterByInstanceBaseId(uint npcBaseId, int language, string? preferredName = null)
     {
         lock (_writeLock)
         {
             if (_disposed) return null;
 
-            return _context.CharacterInstances
+            var candidates = _context.CharacterInstances
                 .Include(ci => ci.Character)
-                .FirstOrDefault(ci => ci.NpcBaseId == (long)npcBaseId)
-                ?.Character;
+                .Where(ci => ci.NpcBaseId == (long)npcBaseId)
+                .ToList();
+
+            return candidates
+                .Where(ci => ci.Character != null)
+                .OrderByDescending(ci => ci.Character!.Language == language)
+                .ThenByDescending(ci => !string.IsNullOrEmpty(ci.Character!.VoiceKey))
+                .ThenByDescending(ci => !string.IsNullOrWhiteSpace(preferredName)
+                    && string.Equals(ci.Character!.Name, preferredName, StringComparison.OrdinalIgnoreCase))
+                .ThenByDescending(ci => ci.LastSeen)
+                .Select(ci => ci.Character)
+                .FirstOrDefault();
         }
     }
 

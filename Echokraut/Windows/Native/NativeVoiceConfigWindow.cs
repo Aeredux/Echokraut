@@ -279,6 +279,8 @@ public sealed unsafe class NativeVoiceConfigWindow : NativeAddon
 
     private void Save()
     {
+        _npcData.SaveVoice(_voice);
+        _onChanged();
         _config.Save();
     }
 

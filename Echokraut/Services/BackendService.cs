@@ -124,18 +124,30 @@ public class BackendService : IBackendService, IDisposable
             foreach (var newVoice in newVoices)
             {
                 var voiceName = Path.GetFileNameWithoutExtension(newVoice);
-                var newEkVoice = new EchokrautVoice
+                var existingByName = existingVoices.FirstOrDefault(v =>
+                    string.Equals(v.VoiceName, voiceName, StringComparison.OrdinalIgnoreCase));
+
+                var newEkVoice = existingByName != null
+                    ? VoiceEntityToEchokrautVoice(existingByName)
+                    : new EchokrautVoice
+                    {
+                        VoiceName = voiceName,
+                        Volume = 1,
+                        AllowedGenders = new List<Genders>(),
+                        AllowedRaces = new List<NpcRaces>(),
+                        IsDefault = newVoice.Equals(Constants.NARRATORVOICE, StringComparison.OrdinalIgnoreCase),
+                        UseAsRandom = voiceName.Contains("NPC")
+                    };
+
+                newEkVoice.BackendVoice = newVoice;
+                newEkVoice.VoiceName = voiceName;
+
+                if (existingByName == null)
                 {
-                    BackendVoice = newVoice,
-                    VoiceName = voiceName,
-                    Volume = 1,
-                    AllowedGenders = new List<Genders>(),
-                    AllowedRaces = new List<NpcRaces>(),
-                    IsDefault = newVoice.Equals(Constants.NARRATORVOICE, StringComparison.OrdinalIgnoreCase),
-                    UseAsRandom = voiceName.Contains("NPC")
-                };
-                _npcData.ReSetVoiceGenders(newEkVoice, eventId);
-                _npcData.ReSetVoiceRaces(newEkVoice, eventId);
+                    _npcData.ReSetVoiceGenders(newEkVoice, eventId);
+                    _npcData.ReSetVoiceRaces(newEkVoice, eventId);
+                }
+
                 _db.UpsertVoice(EchokrautVoiceToEntity(newEkVoice));
             }
         }
@@ -312,6 +324,9 @@ public class BackendService : IBackendService, IDisposable
         try
         {
             var voice = message.Speaker.Voice?.BackendVoice;
+            _log.Info(nameof(GenerateVoice),
+                $"Speaker={message.Speaker.Name} voice_key='{message.Speaker.voice}' resolved='{voice ?? "(null)"}'",
+                eventId);
             if (string.IsNullOrEmpty(voice))
             {
                 _log.Warning(nameof(GenerateVoice), "No voice assigned to speaker", eventId);
@@ -439,8 +454,7 @@ public class BackendService : IBackendService, IDisposable
 
         // Name-substring match — accept any voice whose name contains the NPC's name regardless
         // of the formal race/gender/body-type filter, matching IsSelectable.
-        if (!string.IsNullOrEmpty(npc.Name) &&
-            voice.VoiceName.Contains(npc.Name, StringComparison.OrdinalIgnoreCase))
+        if (NameContainsNormalized(voice.VoiceName, npc.Name))
             return true;
 
         var isGenderedRace = _npcData.IsGenderedRace(npc.Race);
@@ -510,7 +524,7 @@ public class BackendService : IBackendService, IDisposable
         // Try to find voice by name
         for (var i = 0; i < voices.Count; i++)
         {
-            if (voices[i].VoiceName.Contains(npcName, StringComparison.OrdinalIgnoreCase))
+            if (NameContainsNormalized(voices[i].VoiceName, npcName))
                 return voices[i];
         }
 
@@ -527,6 +541,68 @@ public class BackendService : IBackendService, IDisposable
             return matches[_random.Next(0, matches.Count)];
 
         return defaultVoice;
+    }
+
+    private static bool NameContainsNormalized(string? voiceName, string? npcName)
+    {
+        var needle = NormalizeNameToken(npcName);
+        if (string.IsNullOrEmpty(needle))
+            return false;
+
+        // Compare against token boundaries (and common NPC-prefixed tokens) to avoid
+        // short-name false positives like "Galla" matching "Gallagher".
+        var tokens = GetNormalizedNameTokens(voiceName);
+        for (var i = 0; i < tokens.Count; i++)
+        {
+            var token = tokens[i];
+            if (token.Equals(needle, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            if (token.Length > needle.Length
+                && token.EndsWith(needle, StringComparison.OrdinalIgnoreCase)
+                && token.StartsWith("npc", StringComparison.OrdinalIgnoreCase)
+                && token.Length <= needle.Length + 3)
+                return true;
+        }
+
+        return false;
+    }
+
+    private static string NormalizeNameToken(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+
+        var chars = value.Where(char.IsLetterOrDigit);
+        return new string(chars.ToArray());
+    }
+
+    private static List<string> GetNormalizedNameTokens(string? value)
+    {
+        var tokens = new List<string>();
+        if (string.IsNullOrEmpty(value))
+            return tokens;
+
+        var tokenChars = new List<char>(value.Length);
+        foreach (var c in value)
+        {
+            if (char.IsLetterOrDigit(c))
+            {
+                tokenChars.Add(c);
+                continue;
+            }
+
+            if (tokenChars.Count == 0)
+                continue;
+
+            tokens.Add(new string(tokenChars.ToArray()));
+            tokenChars.Clear();
+        }
+
+        if (tokenChars.Count > 0)
+            tokens.Add(new string(tokenChars.ToArray()));
+
+        return tokens;
     }
 
     private async Task GenerationLoopAsync(CancellationToken cancellationToken)

@@ -25,7 +25,7 @@ public interface IDatabaseService : IDisposable
     List<CharacterEntity> GetPlayers();
     List<CharacterEntity> GetAllCharacters();
     CharacterEntity? FindCharacter(string name, Genders gender, NpcRaces race, int language);
-    CharacterEntity? FindCharacterByInstanceBaseId(uint npcBaseId);
+    CharacterEntity? FindCharacterByInstanceBaseId(uint npcBaseId, int language, string? preferredName = null);
     CharacterEntity UpsertCharacter(CharacterEntity character);
     void DeleteCharacter(int characterId);
 

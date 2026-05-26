@@ -393,10 +393,19 @@ public class VoiceMessageProcessor : IVoiceMessageProcessor
         // inference, or same-name NPC collisions would otherwise bounce between rows.
         if (speaker != null
             && speaker.BaseId != 0
-            && npcData.ObjectKind != ObjectKind.Pc)
+            && npcData.ObjectKind != ObjectKind.Pc
+            && npcData.Race == NpcRaces.Unknown)
         {
-            var existingCharacter = _db.FindCharacterByInstanceBaseId(speaker.BaseId);
-            if (existingCharacter != null)
+            var existingCharacter = _db.FindCharacterByInstanceBaseId(
+                speaker.BaseId,
+                (int)npcData.Language,
+                npcData.Name);
+            var hasVoice = existingCharacter != null && !string.IsNullOrEmpty(existingCharacter.VoiceKey);
+
+            // Only adopt instance-linked identity when it already has a persisted voice.
+            // This avoids overwriting canonical named-NPC resolution with stale no-voice rows,
+            // which can cause designated voices (name-match path) to regress into random picks.
+            if (existingCharacter != null && hasVoice)
             {
                 npcData.Name = existingCharacter.Name;
                 npcData.Race = (NpcRaces)existingCharacter.Race;

@@ -457,6 +457,5 @@ public class AlltalkInstanceService : IAlltalkInstanceService, IDisposable
     public void Dispose()
     {
         StopInstall(new EKEventId(0, TextSource.Backend));
-        StopInstance(new EKEventId(0, TextSource.Backend));
     }
 }

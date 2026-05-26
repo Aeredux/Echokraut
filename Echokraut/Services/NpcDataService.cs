@@ -378,7 +378,8 @@ public class NpcDataService : INpcDataService
 
     private static bool MatchesIdentity(NpcMapData a, NpcMapData b)
     {
-        return a.Name == b.Name && a.Gender == b.Gender && a.Race == b.Race && a.Language == b.Language;
+        return string.Equals(a.Name, b.Name, StringComparison.OrdinalIgnoreCase)
+            && a.Gender == b.Gender && a.Race == b.Race && a.Language == b.Language;
     }
 
     // ── Entity ↔ NpcMapData mapping ─────────────────────────

@@ -196,7 +196,19 @@ public class AudioPlaybackService : IAudioPlaybackService, IDisposable
         {
             try
             {
-                if (_inDialog)
+                var current = DialogState.CurrentVoiceMessage;
+                var isStillCurrent = current?.EventId?.Id == eventId.Id && current?.EventId?.TextSource == eventId.TextSource;
+                if (!isStillCurrent)
+                {
+                    _log.Debug(nameof(OnSourceEnded),
+                        "Skipping auto-advance for stale dialogue (dialog already advanced manually or by newer line)",
+                        eventId);
+                    _log.End(nameof(OnSourceEnded), eventId);
+                    return;
+                }
+
+                var isTalkLikeSource = message.Source is TextSource.AddonTalk or TextSource.AddonBattleTalk;
+                if (_inDialog || isTalkLikeSource)
                     _framework.RunOnFrameworkThread(() => AutoAdvanceRequested?.Invoke(eventId));
                 else
                     _log.Debug(nameof(OnSourceEnded), "Not inDialog", eventId);

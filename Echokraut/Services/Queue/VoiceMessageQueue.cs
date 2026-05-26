@@ -85,9 +85,9 @@ public class VoiceMessageQueue : IVoiceMessageQueue
         var dialogue = entries.Where(e => IsDialogueSource(e.Message.Source)).ToList();
         if (dialogue.Count > 0)
         {
-            // Hold AddonTalk/BattleTalk entries for 250ms to allow player choice to arrive and be dequeued first
+            // Hold AddonTalk/BattleTalk entries for 200ms to allow player choice to arrive and be dequeued first
             var now = DateTime.UtcNow;
-            const int minQueueAgeMs = 250;
+            const int minQueueAgeMs = 200;
             
             var eligibleDialogue = dialogue
                 .Where(e => 
